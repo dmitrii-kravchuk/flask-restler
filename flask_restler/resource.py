@@ -7,7 +7,7 @@ import logging
 import math
 import re
 
-from apispec import utils
+from apispec import yaml_utils
 from flask import request, current_app, abort, Response
 from flask._compat import with_metaclass
 from flask.json import dumps
@@ -16,7 +16,7 @@ from flask.views import View
 from . import APIError, logger
 from .auth import current_user
 from .filters import Filters, FILTERS_ARG
-
+from copy import deepcopy
 
 try:
     from urllib.parse import urlencode
@@ -318,10 +318,10 @@ class Resource(with_metaclass(ResourceMeta, View)):
     @classmethod
     def update_specs(cls, specs):
         if cls.Schema:
-            specs.definition(cls.meta.name, schema=cls.Schema)
+            specs.components.schema(cls.meta.name, schema=cls.Schema)
 
-        operations = utils.load_operations_from_docstring(cls.__doc__)
-        specs.add_path(RE_URL.sub(r'{\1}', cls.meta.url), operations=cls.update_operations_specs(
+        operations = yaml_utils.load_operations_from_docstring(cls.__doc__)
+        specs.path(RE_URL.sub(r'{\1}', cls.meta.url), operations=cls.update_operations_specs(
             operations, ('GET', 'POST'),
         ))
 
@@ -335,10 +335,10 @@ class Resource(with_metaclass(ResourceMeta, View)):
                     'required': True,
                 }]
             )
-            specs.add_path(RE_URL.sub(r'{\1}', cls.meta.url_detail), operations=ops)
+            specs.path(RE_URL.sub(r'{\1}', cls.meta.url_detail), operations=ops)
 
         for endpoint, (url_, name_, params_) in cls.meta.endpoints.values():
-            specs.add_path(
+            specs.path(
                 RE_URL.sub(r'{\1}', "%s%s" % (cls.meta.url.rstrip('/'), url_)),
                 operations=cls.update_operations_specs(
                     operations, params_.get('methods', ('GET',)), method=getattr(cls, name_, None)
@@ -357,7 +357,7 @@ class Resource(with_metaclass(ResourceMeta, View)):
             if not cls_method:
                 continue
 
-            defaults = dict(specs)
+            defaults = dict(deepcopy(specs))
             defaults.setdefault('consumes', ['application/json'])
             defaults.setdefault('produces', ['application/json'])
             defaults.setdefault('tags', [cls.meta.name])
@@ -390,7 +390,7 @@ class Resource(with_metaclass(ResourceMeta, View)):
             if method_name in operations:
                 defaults.update(operations[method_name])
 
-            docstring_yaml = utils.load_yaml_from_docstring(cls_method.__doc__)
+            docstring_yaml = yaml_utils.load_yaml_from_docstring(cls_method.__doc__)
             if docstring_yaml:
                 defaults.update(docstring_yaml)
 
