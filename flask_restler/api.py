@@ -151,14 +151,20 @@ class Api(Blueprint):
     def specs_view(self, *args, **kwargs):
         specs = APISpec(title=self.name, version=self.version,
                         openapi_version=self.openapi_ver,
-                        basePath=self.url_prefix, host=request.host, plugins=[MarshmallowPlugin()])
+                        servers=[{'url': self.url_prefix}],
+                        host=request.host, plugins=[MarshmallowPlugin()])
 
         for resource in self.resources:
             resource.update_specs(specs)
 
         specs = specs.to_dict()
         if isinstance(self.specs, dict):
-            specs.update(self.specs)
+            # half-deep merge
+            for k, v in self.specs.items():
+                if k in specs:
+                    specs[k].update(v)
+                else:
+                    specs[k] = v
         return specs
 
 

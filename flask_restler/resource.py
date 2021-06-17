@@ -380,7 +380,8 @@ class Resource(with_metaclass(ResourceMeta, View)):
             })
             if cls.Schema:
                 schema_name = cls.Schema.__name__.replace('Schema', '')
-                defaults['responses'][200]['schema'] = {'$ref': '#/components/schemas/%s' % schema_name}
+                defaults['responses'][200]['content']['application/json']['schema'] \
+                    = {'$ref': '#/components/schemas/%s' % schema_name}
 
             if method_name in ('put', 'patch', 'post'):
                 defaults.setdefault('parameters', [])
@@ -389,13 +390,15 @@ class Resource(with_metaclass(ResourceMeta, View)):
                     schema_name = cls.Schema.__name__.replace('Schema', '')
                     schema['$ref'] = '#/components/schemas/%s' % schema_name
 
-                defaults['parameters'].append({
-                    'name': 'body',
-                    'in': 'body',
-                    'description': 'Resource Body',
+                defaults['requestBody'] = {
+                    'description': 'Request Body',
                     'required': True,
-                    'schema': schema,
-                })
+                    'content': {
+                        'application/json': {
+                            'schema':   schema
+                        }
+                    }
+                }
 
             if method_name in operations:
                 defaults.update(operations[method_name])
