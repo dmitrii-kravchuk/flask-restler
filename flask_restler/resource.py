@@ -317,8 +317,11 @@ class Resource(with_metaclass(ResourceMeta, View)):
 
     @classmethod
     def update_specs(cls, specs):
+        schema_name = cls.meta.name
         if cls.Schema:
-            specs.components.schema(cls.meta.name, schema=cls.Schema)
+            schema_name = cls.Schema.__name__.replace('Schema', '')
+            if schema_name not in specs.components._schemas:
+                specs.components.schema(schema_name, schema=cls.Schema)
 
         operations = yaml_utils.load_operations_from_docstring(cls.__doc__)
         specs.path(RE_URL.sub(r'{\1}', cls.meta.url), operations=cls.update_operations_specs(
@@ -326,20 +329,25 @@ class Resource(with_metaclass(ResourceMeta, View)):
         ))
 
         if cls.meta.url_detail:
+            _url = RE_URL.sub(r'{\1}', cls.meta.url_detail)
+            m = re.match(r'.+/{([^{/]+)}', _url)
+            _id_name = m.group(1) if m else schema_name
             ops = cls.update_operations_specs(
                 operations, ('GET', 'PUT', 'PATCH', 'DELETE'), parameters=[{
-                    'name': cls.meta.name,
+                    'name': _id_name,
                     'in': 'path',
                     'description': 'Resource Identifier',
-                    'type': 'string',
                     'required': True,
+                    'schema': {
+                        'type': 'string',
+                    }
                 }]
             )
-            specs.path(RE_URL.sub(r'{\1}', cls.meta.url_detail), operations=ops)
+            specs.path(_url, operations=ops)
 
         for endpoint, (url_, name_, params_) in cls.meta.endpoints.values():
             specs.path(
-                RE_URL.sub(r'{\1}', "%s%s" % (cls.meta.url.rstrip('/'), url_)),
+                RE_URL.sub(r'{\1}', "%s/%s" % (cls.meta.url.rstrip('/'), url_)),
                 operations=cls.update_operations_specs(
                     operations, params_.get('methods', ('GET',)), method=getattr(cls, name_, None)
                 ))
@@ -371,13 +379,15 @@ class Resource(with_metaclass(ResourceMeta, View)):
                 200: {'description': 'OK', 'content': {'application/json': {}}}
             })
             if cls.Schema:
-                defaults['responses'][200]['schema'] = {'$ref': '#/definitions/%s' % cls.meta.name}
+                schema_name = cls.Schema.__name__.replace('Schema', '')
+                defaults['responses'][200]['schema'] = {'$ref': '#/components/schemas/%s' % schema_name}
 
             if method_name in ('put', 'patch', 'post'):
                 defaults.setdefault('parameters', [])
                 schema = {}
                 if cls.Schema:
-                    schema['$ref'] = '#/definitions/%s' % cls.meta.name
+                    schema_name = cls.Schema.__name__.replace('Schema', '')
+                    schema['$ref'] = '#/components/schemas/%s' % schema_name
 
                 defaults['parameters'].append({
                     'name': 'body',
