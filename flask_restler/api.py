@@ -30,10 +30,12 @@ class Api(Blueprint):
 
     """Implement REST API."""
 
-    def __init__(self, name, import_name, specs=True, version="1", url_prefix=None, openapi_ver=None, **kwargs):
+    def __init__(self, name, import_name, specs=True, version="1", url_prefix=None, specs_url_prefix=None,
+                 openapi_ver=None, **kwargs):
         self.version = version
         self.specs = specs
         self.openapi_ver = openapi_ver or '3.0.2'
+        self.specs_url_prefix = specs_url_prefix or ''
 
         if not url_prefix and version:
             url_prefix = "/%s" % version
@@ -151,7 +153,7 @@ class Api(Blueprint):
     def specs_view(self, *args, **kwargs):
         specs = APISpec(title=self.name, version=self.version,
                         openapi_version=self.openapi_ver,
-                        servers=[{'url': self.url_prefix}],
+                        servers=[{'url': self.specs_url_prefix + self.url_prefix}],
                         host=request.host, plugins=[MarshmallowPlugin()])
 
         for resource in self.resources:
