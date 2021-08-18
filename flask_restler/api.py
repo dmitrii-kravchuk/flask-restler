@@ -154,7 +154,7 @@ class Api(Blueprint):
         specs = APISpec(title=self.name, version=self.version,
                         openapi_version=self.openapi_ver,
                         servers=[{'url': self.specs_url_prefix + self.url_prefix}],
-                        host=request.host, plugins=[MarshmallowPlugin()])
+                        plugins=[MarshmallowPlugin()])
 
         for resource in self.resources:
             resource.update_specs(specs)

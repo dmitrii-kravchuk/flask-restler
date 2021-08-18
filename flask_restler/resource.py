@@ -366,8 +366,6 @@ class Resource(with_metaclass(ResourceMeta, View)):
                 continue
 
             defaults = dict(deepcopy(specs))
-            defaults.setdefault('consumes', ['application/json'])
-            defaults.setdefault('produces', ['application/json'])
             defaults.setdefault('tags', [cls.meta.name])
 
             docstring = clean_doc(cls_method.__doc__, cls.__doc__)
