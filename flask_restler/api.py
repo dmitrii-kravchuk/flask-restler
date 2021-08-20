@@ -153,7 +153,7 @@ class Api(Blueprint):
     def specs_view(self, *args, **kwargs):
         specs = APISpec(title=self.name, version=self.version,
                         openapi_version=self.openapi_ver,
-                        servers=[{'url': self.specs_url_prefix + self.url_prefix}],
+                        servers=[{'url': request.host.rstrip('/') + self.specs_url_prefix + self.url_prefix}],
                         plugins=[MarshmallowPlugin()])
 
         for resource in self.resources:
