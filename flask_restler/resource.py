@@ -324,33 +324,30 @@ class Resource(with_metaclass(ResourceMeta, View)):
                 specs.components.schema(schema_name, schema=cls.Schema)
 
         operations = yaml_utils.load_operations_from_docstring(cls.__doc__)
-        specs.path(RE_URL.sub(r'{\1}', cls.meta.url), operations=cls.update_operations_specs(
-            operations, ('GET', 'POST'),
-        ))
+
+        openapi_url = convert_flask_url_to_openapi(cls.meta.url)
+        path_parameters = cls.build_path_parameters(openapi_url)
+        operations_spec = cls.update_operations_specs(
+            operations, ('GET', 'POST'), parameters=path_parameters)
+        specs.path(openapi_url, operations=operations_spec)
 
         if cls.meta.url_detail:
-            _url = RE_URL.sub(r'{\1}', cls.meta.url_detail)
-            m = re.match(r'.+/{([^{/]+)}', _url)
-            _id_name = m.group(1) if m else schema_name
-            ops = cls.update_operations_specs(
-                operations, ('GET', 'PUT', 'PATCH', 'DELETE'), parameters=[{
-                    'name': _id_name,
-                    'in': 'path',
-                    'description': 'Resource Identifier',
-                    'required': True,
-                    'schema': {
-                        'type': 'string',
-                    }
-                }]
-            )
-            specs.path(_url, operations=ops)
+            openapi_url = convert_flask_url_to_openapi(cls.meta.url_detail)
+            path_parameters = cls.build_path_parameters(openapi_url)
+            operations_spec = cls.update_operations_specs(
+                operations, ('GET', 'PUT', 'PATCH', 'DELETE'), parameters=path_parameters)
+            specs.path(openapi_url, operations=operations_spec)
 
         for endpoint, (url_, name_, params_) in cls.meta.endpoints.values():
-            specs.path(
-                RE_URL.sub(r'{\1}', "%s/%s" % (cls.meta.url.rstrip('/'), url_)),
-                operations=cls.update_operations_specs(
-                    operations, params_.get('methods', ('GET',)), method=getattr(cls, name_, None)
-                ))
+            openapi_url = convert_flask_url_to_openapi(f"{cls.meta.url.rstrip('/')}/{url_}")
+            path_parameters = cls.build_path_parameters(openapi_url)
+            operations_spec = cls.update_operations_specs(
+                operations,
+                params_.get('methods', ('GET',)),
+                method=getattr(cls, name_, None),
+                parameters=path_parameters
+            )
+            specs.path(openapi_url, operations=operations_spec)
 
     @classmethod
     def update_operations_specs(cls, operations, methods, method=None, **specs):
@@ -366,6 +363,8 @@ class Resource(with_metaclass(ResourceMeta, View)):
                 continue
 
             defaults = dict(deepcopy(specs))
+            defaults.setdefault('consumes', ['application/json'])
+            defaults.setdefault('produces', ['application/json'])
             defaults.setdefault('tags', [cls.meta.name])
 
             docstring = clean_doc(cls_method.__doc__, cls.__doc__)
@@ -408,6 +407,28 @@ class Resource(with_metaclass(ResourceMeta, View)):
             result[method_name] = defaults
         return result
 
+    @classmethod
+    def build_path_parameters(cls, url: str):
+        matches = re.findall(r'/{([^{/]+)}', url)
+        descriptions = cls.describe_path_parameters()
+        return [
+            {
+                'name': parameter,
+                'in': 'path',
+                'description': descriptions.get(parameter),
+                'required': True,
+                'schema': {'type': 'string'}
+            }
+            for parameter in matches
+        ]
+
+    @classmethod
+    def describe_path_parameters(cls):
+        descriptions = {}
+        if cls.meta.url_detail:
+            descriptions[cls.meta.name] = 'Resource Identifier'
+        return descriptions
+
 
 def make_pagination_headers(limit, curpage, total, link_header=True):
     """Return Link Hypermedia Header."""
@@ -440,5 +461,8 @@ def clean_doc(*values):
 
     return None
 
+
+def convert_flask_url_to_openapi(flask_url: str):
+    return RE_URL.sub(r'{\1}', flask_url)
 
 # pylama:ignore=R0201
