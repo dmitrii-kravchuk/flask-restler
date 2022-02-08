@@ -6,6 +6,7 @@ import collections
 import logging
 import math
 import re
+from typing import Optional
 
 from apispec import yaml_utils
 from flask import request, current_app, abort, Response
@@ -328,14 +329,14 @@ class Resource(with_metaclass(ResourceMeta, View)):
         openapi_url = convert_flask_url_to_openapi(cls.meta.url)
         path_parameters = cls.build_path_parameters(openapi_url)
         operations_spec = cls.update_operations_specs(
-            operations, ('GET', 'POST'), parameters=path_parameters)
+            operations, ('GET', 'POST'), detail=None if not cls.meta.url_detail else False, parameters=path_parameters)
         specs.path(openapi_url, operations=operations_spec)
 
         if cls.meta.url_detail:
             openapi_url = convert_flask_url_to_openapi(cls.meta.url_detail)
             path_parameters = cls.build_path_parameters(openapi_url)
             operations_spec = cls.update_operations_specs(
-                operations, ('GET', 'PUT', 'PATCH', 'DELETE'), parameters=path_parameters)
+                operations, ('GET', 'PUT', 'PATCH', 'DELETE'), detail=True, parameters=path_parameters)
             specs.path(openapi_url, operations=operations_spec)
 
         for endpoint, (url_, name_, params_) in cls.meta.endpoints.values():
@@ -345,12 +346,13 @@ class Resource(with_metaclass(ResourceMeta, View)):
                 operations,
                 params_.get('methods', ('GET',)),
                 method=getattr(cls, name_, None),
+                detail=None,
                 parameters=path_parameters
             )
             specs.path(openapi_url, operations=operations_spec)
 
     @classmethod
-    def update_operations_specs(cls, operations, methods, method=None, **specs):
+    def update_operations_specs(cls, operations, methods, method=None, detail=None, **specs):
         operations = operations or {}
         result = {}
         for method_name in methods:
@@ -364,6 +366,9 @@ class Resource(with_metaclass(ResourceMeta, View)):
 
             defaults = dict(deepcopy(specs))
             defaults.setdefault('tags', [cls.meta.name])
+            default_parameters = cls.build_query_parameters(method_name, detail)
+            if default_parameters:
+                defaults['parameters'] = (defaults.get('parameters') or []) + default_parameters
 
             docstring = clean_doc(cls_method.__doc__, cls.__doc__)
             if docstring:
@@ -371,7 +376,11 @@ class Resource(with_metaclass(ResourceMeta, View)):
                 defaults.setdefault('description', docstring)
 
             defaults.setdefault('responses', {
-                200: {'description': 'OK', 'content': {'application/json': {}}}
+                200: {
+                    'description': 'OK',
+                    'content': {'application/json': {}},
+                    'headers': cls.build_response_headers(method_name, detail)
+                }
             })
             if cls.Schema:
                 schema_name = cls.Schema.__name__.replace('Schema', '')
@@ -420,6 +429,64 @@ class Resource(with_metaclass(ResourceMeta, View)):
             for parameter in matches
         ]
 
+    @classmethod
+    def build_response_headers(cls, method: str, detail: Optional[bool]) -> dict:
+        if method == 'get' and detail is False:
+            return {
+                'X-Total-Count': {
+                    'description': 'Total number of results',
+                    'schema': {'type': 'integer'}
+                },
+                'X-Limit': {
+                    'description': 'Number results per page. Requests that return multiple items ' +
+                                'will be paginated to 100 items by default. ' + 
+                                'You can specify further pages with the `?page` parameter. ' + 
+                                'For some resources, you can also set a custom page ' + 
+                                'size up to 1000 with the `?per_page` parameter.',
+                    'schema': {'type': 'integer'}
+                },
+                'X-Page-Last': {
+                    'description': 'Number of last page',
+                    'schema': {'type': 'integer'}
+                },
+                'X-Page': {
+                    'description': 'Current Page Number (starts from 0)',
+                    'schema': {'type': 'integer'}
+                }
+            }
+        return {}
+
+    @classmethod
+    def build_query_parameters(cls, method: str, detail: Optional[bool]) -> list:
+        if method == 'get' and detail is False:
+            return [
+                {
+                    'name': PAGE_ARG,
+                    'in': 'query',
+                    'description': 'Page number of dataset',
+                    'required': False,
+                    'schema': {'type': 'integer', 'minimum': 0}
+                },
+                {
+                    'name': PER_PAGE_ARG,
+                    'in': 'query',
+                    'description': 'Custom page size of dataset',
+                    'required': False,
+                    'schema': {'type': 'integer', 'default': 100}
+                },
+                {
+                    'name': SORT_ARG,
+                    'in': 'query',
+                    'description': 'String with a comma-separated list of parameters by which to sort the dataset. ' + 
+                                   'To specify a descending order, add a "-" character before the parameter. ' +
+                                   'For example, `?sort=-created_at,id`',
+                    'required': False,
+                    'schema': {'type': 'string', 'example': ''},
+                }
+            ]
+
+        return []
+        
     @classmethod
     def describe_path_parameters(cls):
         descriptions = {}
