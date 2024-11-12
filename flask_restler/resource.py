@@ -10,7 +10,6 @@ from typing import Optional
 
 from apispec import yaml_utils
 from flask import request, current_app, abort, Response
-from flask._compat import with_metaclass
 from flask.json import dumps
 from flask.views import View
 
@@ -30,6 +29,17 @@ PAGE_ARG = 'page'
 SORT_ARG = 'sort'
 INTERNAL_ARGS = set([PER_PAGE_ARG, PAGE_ARG, SORT_ARG, FILTERS_ARG])
 RE_URL = re.compile(r'<(?:[^:<>]+:)?([^<>]+)>')
+
+
+def with_metaclass(meta, *bases):
+    """Create a base class with a metaclass."""
+    # This requires a bit of explanation: the basic idea is to make a
+    # dummy metaclass for one level of class instantiation that replaces
+    # itself with the actual metaclass.
+    class metaclass(type):
+        def __new__(cls, name, this_bases, d):
+            return meta(name, bases, d)
+    return type.__new__(metaclass, 'temporary_class', (), {})
 
 
 class ResourceOptions(object):

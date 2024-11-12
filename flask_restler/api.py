@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 from flask import Blueprint, jsonify, request, render_template, json, Response
-from flask._compat import string_types, PY2
 import os
 import urllib
 import warnings
@@ -15,10 +14,7 @@ from apispec import APISpec
 from apispec.ext.marshmallow import MarshmallowPlugin
 #  from apispec.ext.marshmallow.swagger import schema2jsonschema
 
-if PY2:
-    urlencode = urllib.urlencode
-else:
-    urlencode = urllib.parse.urlencode
+urlencode = urllib.parse.urlencode
 
 
 DEFAULT = object()
@@ -123,7 +119,7 @@ class Api(Blueprint):
         if resource is not None and isinstance(resource, type) and issubclass(resource, Resource):
             return wrapper(resource)
 
-        elif isinstance(resource, string_types):
+        elif isinstance(resource, str):
             url = resource
 
         return wrapper
